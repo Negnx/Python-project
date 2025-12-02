@@ -50,21 +50,13 @@ coords(port_maria, 18.3667, -76.8833).
 coords(annotto_bay, 18.2667, -76.7667).
 coords(gayle, 18.3167, -76.8500).
 
+% St. Elizabeth
+coords(santa_cruz, 18.0667, -77.7167).
+coords(black_river, 18.0250, -77.8500).
+
 /* ==================================================================
    ROAD NETWORK DATA
    Format: road(Source, Destination, DistanceKm, Type, Status, TimeMins)
-   
-   Road Types:
-   - paved: Well-maintained paved road
-   - unpaved: Dirt or gravel road
-   - deep_potholes: Road with severe potholes
-   - broken_cisterns: Road with damaged water cisterns/drainage
-   
-   Status:
-   - open: Road is accessible
-   - closed: Road is blocked
-   - seasonal: Road only accessible in dry season
-   - under_repair: Road undergoing maintenance
    ================================================================== */
 
 % Kingston Metropolitan Area
@@ -115,11 +107,9 @@ road(alexandria, linstead, 32, deep_potholes, open, 55).
 road(bog_walk, gayle, 45, broken_cisterns, closed, 70).
 road(ewarton, brown_town, 35, unpaved, under_repair, 60).
 
-% Emergency alternate routes
+% Emergency alternate routes (now using defined coords)
 road(mandeville, santa_cruz, 25, paved, open, 30).
-road(santa_cruz, 18.0667, -77.7167).
 road(santa_cruz, black_river, 35, paved, open, 42).
-road(black_river, 18.0250, -77.8500).
 
 /* ==================================================================
    BIDIRECTIONAL EDGE REPRESENTATION
@@ -364,6 +354,25 @@ find_route(bfs, Start, Goal, Criteria, Path, Distance, Time) :-
 
 find_route(astar, Start, Goal, Criteria, Path, Distance, Time) :-
     astar(Start, Goal, Criteria, Path, Distance, Time).
+
+/* ==================================================================
+   NETWORK STATISTICS (NEW SECTION ADDED TO FIX ERROR)
+   ================================================================== */
+
+% Count total number of unique locations (by counting 'coords' facts)
+count_locations(Count) :-
+    findall(L, coords(L, _, _), Locations),
+    length(Locations, Count).
+
+% Count total number of roads (by counting 'road' facts)
+count_roads(Count) :-
+    findall(R, road(_, _, _, _, _, _), Roads),
+    length(Roads, Count).
+
+% Collect all network statistics for Python integration
+get_network_stats(LocCount, RoadCount) :-
+    count_locations(LocCount),
+    count_roads(RoadCount).
 
 /* ==================================================================
    ADMIN FUNCTIONS - Dynamic Network Updates

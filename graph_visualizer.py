@@ -14,7 +14,7 @@ import re
 class NetworkGraphVisualizer:
     """Visualizes the road network as an interactive graph"""
     
-    def __init__(self, root, prolog_file="roads_kb.pl"):
+    def __init__(self, root, prolog_file= r"C:\\Users\\mille\\Downloads\\VSCode\\Python project\\roads_kb.pl"):
         self.root = root
         self.root.title("Jamaican Rural Road Network - Graph View")
         self.root.geometry("1400x900")

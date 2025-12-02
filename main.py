@@ -12,10 +12,15 @@ Date: November 2025
 import subprocess
 import sys
 import os
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict # Added Dict import
 
 # Configuration
-PROLOG_FILE = r"C:\Users\mille\Downloads\VSCode\Python project\roads_kb.pl"
+# Use a path relative to the current script's directory for robustness
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROLOG_FILE = r"C:\\Users\\mille\\Downloads\\VSCode\\Python project\\roads_kb.pl"
+
+# --- IMPORTANT: UPDATE THIS PATH ---
+# You MUST ensure this path points to your SWI-Prolog executable.
 SWIPL_CMD = r"C:\Program Files\swipl\bin\swipl.exe"  # Update if swipl is not in PATH
 
 
@@ -68,7 +73,7 @@ class RuralRoadPathFinder:
         if not os.path.exists(self.prolog_file):
             raise PathFinderError(
                 f"Knowledge base file '{self.prolog_file}' not found!\n"
-                f"Please ensure the file is in the current directory."
+                f"Please ensure the file is in the current directory as main.py."
             )
     
     def find_route(self, algorithm: str, start: str, goal: str, 
@@ -113,10 +118,17 @@ class RuralRoadPathFinder:
             if result.stderr:
                 error_msg = result.stderr.strip()
                 if "existence_error" in error_msg:
-                    raise PathFinderError(f"Location not found in network: {start} or {goal}")
-                else:
-                    raise PathFinderError(f"Prolog error: {error_msg}")
-            raise PathFinderError("No route found with the given criteria")
+                    if 'coords' in error_msg or 'road' in error_msg:
+                        raise PathFinderError(f"Location not found in network: {start} or {goal}")
+                    else:
+                        raise PathFinderError(f"Prolog runtime error (code {result.returncode}): {error_msg}")
+            
+            # If stdout is empty, it means 'find_route' failed (no path found)
+            if not result.stdout.strip():
+                 return None
+            
+            # Catch-all for non-zero return code
+            raise PathFinderError(f"Prolog process failed with return code {result.returncode}")
         
         # Parse output
         if not result.stdout.strip():
@@ -146,7 +158,12 @@ class RuralRoadPathFinder:
             # Parse path: [kingston,spanish_town,linstead] -> list
             path_str = parts[0].strip()
             path_str = path_str.strip('[]')
-            path_list = [loc.strip() for loc in path_str.split(',')]
+            
+            # Handle empty list case
+            if not path_str:
+                path_list = []
+            else:
+                path_list = [loc.strip() for loc in path_str.split(',')]
             
             # Parse distance and time
             distance = float(parts[1].strip())
@@ -156,7 +173,42 @@ class RuralRoadPathFinder:
             
         except (ValueError, IndexError) as e:
             raise PathFinderError(f"Failed to parse Prolog output: {output}\nError: {e}")
+
     
+    def get_network_stats(self) -> Dict[str, int]:
+        """
+        Retrieve network statistics (number of locations and roads)
+        from the knowledge base.
+        """
+        goal_term = (
+            "get_network_stats(Locs, Roads),"
+            "write(Locs),write('|'),write(Roads),nl,halt"
+        )
+        
+        cmd = [SWIPL_CMD, "-q", "-s", self.prolog_file, "-g", goal_term]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                # Parse output: "24|48"
+                parts = result.stdout.strip().split('|')
+                if len(parts) == 2:
+                    return {
+                        'locations': int(parts[0].strip()),
+                        'roads': int(parts[1].strip())
+                    }
+        except Exception as e:
+            print(f"Warning: Failed to get network stats. Error: {e}", file=sys.stderr)
+        
+        # Return fallback stats if query fails
+        # Use a list comprehension to count locations without relying on get_all_locations()
+        # if initialization failed. For simplicity and robustness here, we'll call get_all_locations().
+        return {
+            'locations': len(self.get_all_locations()),
+            'roads': 0 
+        }
+
     def add_road(self, source: str, dest: str, distance: float,
                  road_type: str, status: str, time_mins: float) -> bool:
         """
@@ -206,8 +258,12 @@ class RuralRoadPathFinder:
             if result.returncode == 0 and result.stdout.strip():
                 # Parse list from Prolog output
                 locs_str = result.stdout.strip().strip('[]')
-                locations = [loc.strip() for loc in locs_str.split(',')]
-                return sorted(locations)
+                
+                if locs_str:
+                    locations = [loc.strip() for loc in locs_str.split(',')]
+                    return sorted(locations)
+                else:
+                    return []
         except Exception:
             pass
         
@@ -343,14 +399,19 @@ def find_route_interactive(pathfinder: RuralRoadPathFinder):
     # Get available locations
     locations = pathfinder.get_all_locations()
     
+    if not locations:
+        print("\n❌ Error: No locations found in the network.")
+        return
+        
     print(f"\nAvailable locations ({len(locations)}):")
+    print("-" * 70)
     for i, loc in enumerate(locations, 1):
         print(f"  {i:2d}. {loc.replace('_', ' ').title()}", end="")
-        if i % 3 == 0:
+        if i % 3 == 0 or i == len(locations):
             print()
         else:
             print("\t", end="")
-    print("\n")
+    print("-" * 70)
     
     # Get start and destination
     start = input("Enter starting location: ").strip().lower().replace(' ', '_')
@@ -358,7 +419,7 @@ def find_route_interactive(pathfinder: RuralRoadPathFinder):
     
     if start not in locations or goal not in locations:
         print("\n❌ Error: One or both locations not found in the network.")
-        print("Please check spelling and use underscores for spaces (e.g., 'spanish_town')")
+        print("Please check spelling.")
         return
     
     if start == goal:
@@ -444,7 +505,7 @@ def main_menu():
         print("-"*70)
         print("1. Find Route")
         print("2. Add Road (Admin)")
-        print("3. View All Locations")
+        print("3. View All Locations/Stats") # Updated menu option name
         print("4. Launch GUI (if available)")
         print("5. Exit")
         print("-"*70)
@@ -458,8 +519,14 @@ def main_menu():
             add_road_interactive(pathfinder)
             
         elif choice == "3":
+            # Display stats using the new method
             locations = pathfinder.get_all_locations()
-            print(f"\n📍 Available Locations ({len(locations)}):")
+            stats = pathfinder.get_network_stats()
+            print(f"\n📍 Network Statistics:")
+            print(f"   - Total Locations: {stats.get('locations')}")
+            print(f"   - Total Roads: {stats.get('roads')}")
+            print("-" * 70)
+            print(f"📍 Available Locations ({len(locations)}):")
             print("-" * 70)
             for i, loc in enumerate(locations, 1):
                 print(f"  {i:2d}. {loc.replace('_', ' ').title()}")
