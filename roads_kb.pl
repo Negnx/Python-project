@@ -1,20 +1,11 @@
-/* roads_kb.pl
-   Jamaican Rural Road Path Finder - Knowledge Base
-   University of Technology Jamaica - AI Project
-   
-   This file stores the road network and implements pathfinding algorithms:
-   - BFS (Breadth-First Search)
-   - Dijkstra's Algorithm
-   - A* Algorithm with GPS-based heuristics
-*/
+
 
 :- dynamic road/6.
 :- dynamic coords/3.
 
-/* ==================================================================
-   GPS COORDINATES FOR JAMAICAN LOCATIONS
-   Format: coords(Location, Latitude, Longitude)
-   ================================================================== */
+
+   //GPS COORDINATES FOR JAMAICAN LOCATIONS//
+   //Format: coords(Location, Latitude, Longitude)//
 
 % Kingston and surrounding areas
 coords(kingston, 17.9714, -76.7931).
@@ -54,10 +45,9 @@ coords(gayle, 18.3167, -76.8500).
 coords(santa_cruz, 18.0667, -77.7167).
 coords(black_river, 18.0250, -77.8500).
 
-/* ==================================================================
+/* 
    ROAD NETWORK DATA
-   Format: road(Source, Destination, DistanceKm, Type, Status, TimeMins)
-   ================================================================== */
+   Format: road(Source, Destination, DistanceKm, Type, Status, TimeMins) */
 
 % Kingston Metropolitan Area
 road(kingston, spanish_town, 21, paved, open, 25).
@@ -111,10 +101,10 @@ road(ewarton, brown_town, 35, unpaved, under_repair, 60).
 road(mandeville, santa_cruz, 25, paved, open, 30).
 road(santa_cruz, black_river, 35, paved, open, 42).
 
-/* ==================================================================
+/* 
    BIDIRECTIONAL EDGE REPRESENTATION
    Makes all roads accessible in both directions
-   ================================================================== */
+ */
 
 edge(U, V, Dist, Type, Status, Time) :-
     road(U, V, Dist, Type, Status, Time).
@@ -122,10 +112,10 @@ edge(U, V, Dist, Type, Status, Time) :-
 edge(U, V, Dist, Type, Status, Time) :-
     road(V, U, Dist, Type, Status, Time).
 
-/* ==================================================================
+/* 
    CRITERIA FILTERING
    Determines if an edge is allowed based on user criteria
-   ================================================================== */
+ */
 
 edge_allowed(Type, Status, Criteria) :-
     % Check if we should avoid unpaved roads
@@ -156,10 +146,10 @@ allowed_edge(U, V, Dist, Type, Status, Time, Criteria) :-
     edge(U, V, Dist, Type, Status, Time),
     edge_allowed(Type, Status, Criteria).
 
-/* ==================================================================
+/*
    HEURISTIC CALCULATION - GPS-Based Distance
    Uses Haversine formula for accurate distance estimation
-   ================================================================== */
+ */
 
 % Convert degrees to radians
 deg_to_rad(Deg, Rad) :- 
@@ -195,10 +185,10 @@ heuristic(Node, Node, 0) :- !.
 % Fallback if coordinates not found
 heuristic(_, _, 50).
 
-/* ==================================================================
+/* 
    ALGORITHM 1: BREADTH-FIRST SEARCH (BFS)
    Finds path with fewest hops (unweighted search)
-   ================================================================== */
+ */
 
 bfs(Start, Goal, Criteria, Path, Distance, Time) :-
     bfs_queue([[Start]], Goal, Criteria, RevPath),
@@ -217,9 +207,9 @@ bfs_queue([CurrentPath|OtherPaths], Goal, Criteria, SolutionPath) :-
     append(OtherPaths, NewPaths, UpdatedQueue),
     bfs_queue(UpdatedQueue, Goal, Criteria, SolutionPath).
 
-/* ==================================================================
+/* 
    UTILITY: Calculate total distance and time for a path
-   ================================================================== */
+*/
 
 path_distance_time([_], _Criteria, 0, 0).
 
@@ -229,10 +219,10 @@ path_distance_time([A,B|Rest], Criteria, TotalDist, TotalTime) :-
     TotalDist is Dist + SubDist,
     TotalTime is Time + SubTime.
 
-/* ==================================================================
+/* 
    ALGORITHM 2: DIJKSTRA'S ALGORITHM
    Finds shortest distance path (weighted search)
-   ================================================================== */
+*/
 
 dijkstra(Start, Goal, Criteria, Path, Distance, Time) :-
     dijkstra_search([node(Start, [Start], 0)], [], Goal, Criteria, 
@@ -268,10 +258,10 @@ strip_keys([], []).
 strip_keys([_-Node|Rest], [Node|RestNodes]) :-
     strip_keys(Rest, RestNodes).
 
-/* ==================================================================
+/*
    ALGORITHM 3: FASTEST TIME SEARCH
    Uses travel time as the weight instead of distance
-   ================================================================== */
+ */
 
 fastest_time(Start, Goal, Criteria, Path, Distance, Time) :-
     fastest_search([node(Start, [Start], 0)], [], Goal, Criteria,
@@ -300,10 +290,10 @@ fastest_search(Open, Closed, Goal, Criteria, Result) :-
     append(RestOpen, Children, NewOpen),
     fastest_search(NewOpen, [Node|Closed], Goal, Criteria, Result).
 
-/* ==================================================================
+/* 
    ALGORITHM 4: A* SEARCH
    Heuristic-guided search for optimal pathfinding
-   ================================================================== */
+*/
 
 astar(Start, Goal, Criteria, Path, Distance, Time) :-
     heuristic(Start, Goal, H0),
@@ -338,10 +328,10 @@ astar_search(Open, Goal, Criteria, Result) :-
 % Helper for A*
 add_key_f(node(Node, Path, G, F), F-node(Node, Path, G, F)).
 
-/* ==================================================================
+/*
    HIGH-LEVEL API FOR PYTHON INTERFACE
    Main entry point for pathfinding requests
-   ================================================================== */
+*/
 
 find_route(shortest_distance, Start, Goal, Criteria, Path, Distance, Time) :-
     dijkstra(Start, Goal, Criteria, Path, Distance, Time).
@@ -355,9 +345,9 @@ find_route(bfs, Start, Goal, Criteria, Path, Distance, Time) :-
 find_route(astar, Start, Goal, Criteria, Path, Distance, Time) :-
     astar(Start, Goal, Criteria, Path, Distance, Time).
 
-/* ==================================================================
+/*
    NETWORK STATISTICS (NEW SECTION ADDED TO FIX ERROR)
-   ================================================================== */
+*/
 
 % Count total number of unique locations (by counting 'coords' facts)
 count_locations(Count) :-
@@ -374,9 +364,9 @@ get_network_stats(LocCount, RoadCount) :-
     count_locations(LocCount),
     count_roads(RoadCount).
 
-/* ==================================================================
+/* 
    ADMIN FUNCTIONS - Dynamic Network Updates
-   ================================================================== */
+*/
 
 % Add a new road to the network
 add_road(Source, Dest, DistanceKm, Type, Status, TimeMins) :-
@@ -408,6 +398,3 @@ list_roads_from(Location) :-
 get_all_locations(Locations) :-
     findall(L, coords(L, _, _), Locations).
 
-/* ==================================================================
-   END OF KNOWLEDGE BASE
-   ================================================================== */
