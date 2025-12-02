@@ -1,6 +1,7 @@
 """
-gui.py - Fixed GUI for Rural Road Path Finder
+gui.py - Enhanced GUI for Rural Road Path Finder
 University of Technology Jamaica - AI Project
+Includes graph visualization and persistent storage
 """
 
 import tkinter as tk
@@ -17,7 +18,7 @@ except ImportError:
 
 
 class PathFinderGUI:
-    """Fixed GUI for the Rural Road Path Finder."""
+    """Enhanced GUI for the Rural Road Path Finder."""
     
     def __init__(self, root):
         self.root = root
@@ -33,6 +34,7 @@ class PathFinderGUI:
             self.root.destroy()
             return
         
+        self.last_result = None  # Store last route for visualization
         self.create_gui()
     
     def create_gui(self):
@@ -125,16 +127,39 @@ class PathFinderGUI:
                           bg='white', font=('Arial', 10)).pack(anchor=tk.W, padx=30)
             self.criteria_vars[value] = var
         
-        # === BIG FIND ROUTE BUTTON ===
-        find_button = tk.Button(scrollable_frame, 
+        # === BUTTONS ===
+        button_frame = tk.Frame(scrollable_frame, bg='white')
+        button_frame.pack(fill=tk.X, padx=20, pady=20)
+        
+        find_button = tk.Button(button_frame, 
                                text="🔍 FIND ROUTE",
                                command=self.find_route,
                                bg='#27ae60',
                                fg='white',
-                               font=('Arial', 14, 'bold'),
-                               pady=15,
+                               font=('Arial', 12, 'bold'),
+                               pady=10,
                                cursor='hand2')
-        find_button.pack(fill=tk.X, padx=20, pady=30)
+        find_button.pack(fill=tk.X, pady=(0, 10))
+        
+        graph_button = tk.Button(button_frame, 
+                                text="🗺️ VIEW NETWORK MAP",
+                                command=self.open_graph_view,
+                                bg='#3498db',
+                                fg='white',
+                                font=('Arial', 11, 'bold'),
+                                pady=8,
+                                cursor='hand2')
+        graph_button.pack(fill=tk.X, pady=(0, 10))
+        
+        admin_button = tk.Button(button_frame, 
+                                text="⚙️ ADMIN PANEL",
+                                command=self.open_admin_panel,
+                                bg='#e67e22',
+                                fg='white',
+                                font=('Arial', 11, 'bold'),
+                                pady=8,
+                                cursor='hand2')
+        admin_button.pack(fill=tk.X)
         
         # Pack canvas and scrollbar
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -175,26 +200,31 @@ class PathFinderGUI:
     
     def _display_welcome_message(self):
         """Display welcome message"""
-        message = """
-╔══════════════════════════════════════╗
+        stats = self.pathfinder.get_network_stats()
+        message = f"""
+╔═══════════════════════════════════════╗
 ║   Welcome to Path Finder System!    ║
-╚══════════════════════════════════════╝
+╚═══════════════════════════════════════╝
 
-📍 Select your starting location and 
-   destination from the dropdowns.
+📊 NETWORK STATISTICS:
+   • Locations: {stats['locations']}
+   • Roads: {stats['roads']}
 
-🔧 Choose your preferred algorithm:
-   • Shortest Distance (Dijkstra)
-   • Fastest Time
-   • Fewest Hops (BFS)
-   • Intelligent Search (A*)
+🔍 SELECT YOUR ROUTE:
+   1. Choose start and destination
+   2. Select pathfinding algorithm
+   3. Apply route constraints
+   4. Click "FIND ROUTE"
 
-⚙️  Apply route constraints as needed.
+🗺️  VIEW NETWORK MAP:
+   See visual representation of the
+   entire road network as a graph
 
-🔍 Click the BIG GREEN "FIND ROUTE" 
-   button to begin!
+⚙️  ADMIN PANEL:
+   Add new roads or update status
+   (changes are saved permanently)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
         self.results_text.delete('1.0', tk.END)
         self.results_text.insert('1.0', message)
@@ -230,27 +260,31 @@ class PathFinderGUI:
             
             if result is None:
                 self._display_no_route()
+                self.last_result = None
             else:
                 path, distance, time = result
+                self.last_result = (path, distance, time)
                 self._display_route_result(path, distance, time, algorithm)
                 
         except PathFinderError as e:
             self._display_error(str(e))
+            self.last_result = None
         except Exception as e:
             self._display_error(f"Unexpected error: {e}")
+            self.last_result = None
     
     def _display_route_result(self, path, distance, time, algorithm):
         """Display route results"""
         formatted_path = [loc.replace('_', ' ').title() for loc in path]
         
         result = f"""
-╔══════════════════════════════════════╗
+╔═══════════════════════════════════════╗
 ║         ROUTE FOUND! ✓               ║
-╚══════════════════════════════════════╝
+╚═══════════════════════════════════════╝
 
 🗺️  Algorithm: {self._get_algorithm_name(algorithm)}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📍 ROUTE ({len(path)} locations):
 
@@ -258,14 +292,14 @@ class PathFinderGUI:
         
         for i, location in enumerate(formatted_path, 1):
             if i == 1:
-                result += f"   {i}. 🏁 {location}\n"
+                result += f"   {i}. 🚗 {location}\n"
             elif i == len(formatted_path):
                 result += f"   {i}. 🎯 {location}\n"
             else:
                 result += f"   {i}. 📌 {location}\n"
         
         result += f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📊 STATISTICS:
 
@@ -273,9 +307,12 @@ class PathFinderGUI:
    ⏱️  Estimated Time:  {time:.0f} minutes
                        ({time/60:.1f} hours)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ✅ Route calculation complete!
+
+💡 TIP: Click "VIEW NETWORK MAP" to see
+   this route visualized on the graph!
         """
         
         self.results_text.delete('1.0', tk.END)
@@ -284,9 +321,9 @@ class PathFinderGUI:
     def _display_no_route(self):
         """Display no route found message"""
         message = """
-╔══════════════════════════════════════╗
+╔═══════════════════════════════════════╗
 ║      NO ROUTE FOUND ✗                ║
-╚══════════════════════════════════════╝
+╚═══════════════════════════════════════╝
 
 ❌ No valid route exists with the current
    constraints.
@@ -298,7 +335,7 @@ class PathFinderGUI:
    • Use a different algorithm
    • Check if roads are closed
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
         self.results_text.delete('1.0', tk.END)
         self.results_text.insert('1.0', message)
@@ -306,15 +343,15 @@ class PathFinderGUI:
     def _display_error(self, error_msg):
         """Display error message"""
         message = f"""
-╔══════════════════════════════════════╗
+╔═══════════════════════════════════════╗
 ║           ERROR ✗                    ║
-╚══════════════════════════════════════╝
+╚═══════════════════════════════════════╝
 
 ❌ An error occurred:
 
    {error_msg}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
         self.results_text.delete('1.0', tk.END)
         self.results_text.insert('1.0', message)
@@ -328,6 +365,199 @@ class PathFinderGUI:
             'astar': 'Intelligent Search (A*)'
         }
         return names.get(algo_key, algo_key)
+    
+    def open_graph_view(self):
+        """Open the network graph visualizer"""
+        try:
+            import graph_visualizer
+            
+            # Create new window
+            graph_window = tk.Toplevel(self.root)
+            visualizer = graph_visualizer.NetworkGraphVisualizer(graph_window)
+            
+            # If we have a last result, highlight it
+            if self.last_result:
+                path, _, _ = self.last_result
+                visualizer.highlight_path(path)
+                
+        except ImportError:
+            messagebox.showerror("Error", 
+                               "graph_visualizer.py not found.\n"
+                               "Please ensure it's in the same directory.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open graph view: {e}")
+    
+    def open_admin_panel(self):
+        """Open admin panel for adding/updating roads"""
+        admin_window = tk.Toplevel(self.root)
+        admin_window.title("Administrator Panel")
+        admin_window.geometry("600x500")
+        
+        # Header
+        header = tk.Label(admin_window, 
+                         text="⚙️ Administrator Panel",
+                         font=('Arial', 16, 'bold'),
+                         bg='#e67e22',
+                         fg='white',
+                         pady=10)
+        header.pack(fill=tk.X)
+        
+        # Notebook for tabs
+        notebook = ttk.Notebook(admin_window)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Add Road Tab
+        add_frame = tk.Frame(notebook, bg='white')
+        notebook.add(add_frame, text="Add Road")
+        
+        self._create_add_road_form(add_frame)
+        
+        # Update Status Tab
+        update_frame = tk.Frame(notebook, bg='white')
+        notebook.add(update_frame, text="Update Status")
+        
+        self._create_update_status_form(update_frame)
+    
+    def _create_add_road_form(self, parent):
+        """Create form for adding roads"""
+        tk.Label(parent, text="Add New Road to Network", 
+                font=('Arial', 12, 'bold'), bg='white').pack(pady=10)
+        
+        form_frame = tk.Frame(parent, bg='white')
+        form_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Source
+        tk.Label(form_frame, text="Source Location:", bg='white').grid(row=0, column=0, sticky=tk.W, pady=5)
+        source_var = tk.StringVar()
+        source_combo = ttk.Combobox(form_frame, textvariable=source_var,
+                                   values=self._format_locations(), width=30)
+        source_combo.grid(row=0, column=1, pady=5, padx=10)
+        
+        # Destination
+        tk.Label(form_frame, text="Destination:", bg='white').grid(row=1, column=0, sticky=tk.W, pady=5)
+        dest_var = tk.StringVar()
+        dest_combo = ttk.Combobox(form_frame, textvariable=dest_var,
+                                 values=self._format_locations(), width=30)
+        dest_combo.grid(row=1, column=1, pady=5, padx=10)
+        
+        # Distance
+        tk.Label(form_frame, text="Distance (km):", bg='white').grid(row=2, column=0, sticky=tk.W, pady=5)
+        distance_var = tk.StringVar()
+        distance_entry = tk.Entry(form_frame, textvariable=distance_var, width=32)
+        distance_entry.grid(row=2, column=1, pady=5, padx=10)
+        
+        # Road Type
+        tk.Label(form_frame, text="Road Type:", bg='white').grid(row=3, column=0, sticky=tk.W, pady=5)
+        type_var = tk.StringVar()
+        type_combo = ttk.Combobox(form_frame, textvariable=type_var,
+                                 values=['paved', 'unpaved', 'deep_potholes', 'broken_cisterns'],
+                                 width=30)
+        type_combo.grid(row=3, column=1, pady=5, padx=10)
+        
+        # Status
+        tk.Label(form_frame, text="Status:", bg='white').grid(row=4, column=0, sticky=tk.W, pady=5)
+        status_var = tk.StringVar()
+        status_combo = ttk.Combobox(form_frame, textvariable=status_var,
+                                   values=['open', 'closed', 'under_repair', 'seasonal'],
+                                   width=30)
+        status_combo.grid(row=4, column=1, pady=5, padx=10)
+        
+        # Time
+        tk.Label(form_frame, text="Travel Time (min):", bg='white').grid(row=5, column=0, sticky=tk.W, pady=5)
+        time_var = tk.StringVar()
+        time_entry = tk.Entry(form_frame, textvariable=time_var, width=32)
+        time_entry.grid(row=5, column=1, pady=5, padx=10)
+        
+        # Add button
+        def add_road():
+            try:
+                source = source_var.get().lower().replace(' ', '_')
+                dest = dest_var.get().lower().replace(' ', '_')
+                distance = float(distance_var.get())
+                road_type = type_var.get()
+                status = status_var.get()
+                time_mins = float(time_var.get())
+                
+                if not all([source, dest, road_type, status]):
+                    messagebox.showwarning("Input Required", "Please fill all fields")
+                    return
+                
+                success = self.pathfinder.add_road_persistent(
+                    source, dest, distance, road_type, status, time_mins
+                )
+                
+                if success:
+                    messagebox.showinfo("Success", "Road added and saved permanently!")
+                    # Refresh locations
+                    self.locations = self.pathfinder.get_all_locations()
+                else:
+                    messagebox.showerror("Error", "Failed to add road")
+                    
+            except ValueError:
+                messagebox.showerror("Error", "Invalid number format")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+        
+        add_btn = tk.Button(form_frame, text="Add Road", command=add_road,
+                           bg='#27ae60', fg='white', font=('Arial', 11, 'bold'),
+                           pady=8, cursor='hand2')
+        add_btn.grid(row=6, column=0, columnspan=2, pady=20)
+    
+    def _create_update_status_form(self, parent):
+        """Create form for updating road status"""
+        tk.Label(parent, text="Update Road Status", 
+                font=('Arial', 12, 'bold'), bg='white').pack(pady=10)
+        
+        form_frame = tk.Frame(parent, bg='white')
+        form_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Source
+        tk.Label(form_frame, text="Source Location:", bg='white').grid(row=0, column=0, sticky=tk.W, pady=5)
+        source_var = tk.StringVar()
+        source_combo = ttk.Combobox(form_frame, textvariable=source_var,
+                                   values=self._format_locations(), width=30)
+        source_combo.grid(row=0, column=1, pady=5, padx=10)
+        
+        # Destination
+        tk.Label(form_frame, text="Destination:", bg='white').grid(row=1, column=0, sticky=tk.W, pady=5)
+        dest_var = tk.StringVar()
+        dest_combo = ttk.Combobox(form_frame, textvariable=dest_var,
+                                 values=self._format_locations(), width=30)
+        dest_combo.grid(row=1, column=1, pady=5, padx=10)
+        
+        # New Status
+        tk.Label(form_frame, text="New Status:", bg='white').grid(row=2, column=0, sticky=tk.W, pady=5)
+        status_var = tk.StringVar()
+        status_combo = ttk.Combobox(form_frame, textvariable=status_var,
+                                   values=['open', 'closed', 'under_repair', 'seasonal'],
+                                   width=30)
+        status_combo.grid(row=2, column=1, pady=5, padx=10)
+        
+        # Update button
+        def update_status():
+            try:
+                source = source_var.get().lower().replace(' ', '_')
+                dest = dest_var.get().lower().replace(' ', '_')
+                status = status_var.get()
+                
+                if not all([source, dest, status]):
+                    messagebox.showwarning("Input Required", "Please fill all fields")
+                    return
+                
+                success = self.pathfinder.update_road_status_persistent(source, dest, status)
+                
+                if success:
+                    messagebox.showinfo("Success", "Road status updated and saved!")
+                else:
+                    messagebox.showerror("Error", "Failed to update status")
+                    
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+        
+        update_btn = tk.Button(form_frame, text="Update Status", command=update_status,
+                              bg='#3498db', fg='white', font=('Arial', 11, 'bold'),
+                              pady=8, cursor='hand2')
+        update_btn.grid(row=3, column=0, columnspan=2, pady=20)
 
 
 def launch_gui():
